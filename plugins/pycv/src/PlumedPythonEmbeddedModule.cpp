@@ -21,8 +21,8 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 #include <pybind11/operators.h>
 #include <pybind11/stl_bind.h>
 
-#include "tools/Vector.h"
-#include "tools/NeighborList.h"
+#include "plumed/tools/Vector.h"
+#include "plumed/tools/NeighborList.h"
 
 #include "PythonCVInterface.h"
 #include "PythonFunction.h"
@@ -35,7 +35,7 @@ namespace py=pybind11;
 
 //NB: the action methods are written two times due to the diamond inheritance
 
-PYBIND11_EMBEDDED_MODULE(plumedCommunications, m) {
+PYBIND11_MODULE(plumedCommunications, m) {
   /*******************************default submodule****************************/
   py::module_ defaults = m.def_submodule("defaults", "Submodule with the default definitions");
   defaults.attr("COMPONENT") = py::dict(py::arg("period")=py::none(),py::arg("derivative")=true);
@@ -110,7 +110,8 @@ PYBIND11_EMBEDDED_MODULE(plumedCommunications, m) {
     auto retAccessor = atomIndexes.mutable_unchecked<1>();
     for (decltype(nat) i=0; i < nat; ++i) {
       //at time of writing getAbsoluteIndexes returns const std::vector<AtomNumber> &
-      retAccessor(i)=self->getAbsoluteIndexes()[i].index();
+      retAccessor(i)
+      =self->getAbsoluteIndexes()[i].index();
     }
     return atomIndexes;
   },
@@ -129,7 +130,8 @@ PYBIND11_EMBEDDED_MODULE(plumedCommunications, m) {
     py::array_t<double> masses(shape);
     auto retAccessor = masses.mutable_unchecked<1>();
     for (decltype(nat) i=0; i < nat; ++i) {
-      retAccessor(i)=self->getMass(i);
+      retAccessor(i)
+      =self->getMass(i);
     }
     return masses;
   },
@@ -142,7 +144,8 @@ PYBIND11_EMBEDDED_MODULE(plumedCommunications, m) {
     py::array_t<double> charges(shape);
     auto retAccessor = charges.mutable_unchecked<1>();
     for (decltype(nat) i=0; i < nat; ++i) {
-      retAccessor(i)=self->getCharge(i);
+      retAccessor(i)
+      =self->getCharge(i);
     }
     return charges;
   },
@@ -196,7 +199,8 @@ return toRet;
     py::array_t<unsigned long> couples(shape);
     auto retAccessor = couples.mutable_unchecked<2>();
     for(size_t c=0; c< ncouples; ++c) {
-      retAccessor(c,0) = self->getClosePair(c).first;
+      retAccessor(c,0)
+      = self->getClosePair(c).first;
       retAccessor(c,1) = self->getClosePair(c).second;
     }
     return couples;
