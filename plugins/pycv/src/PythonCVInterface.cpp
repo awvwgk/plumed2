@@ -16,10 +16,10 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 #include "PythonCVInterface.h"
 
-#include "core/ActionRegister.h"
-#include "core/PlumedMain.h"
-#include "tools/NeighborList.h"
-#include "tools/Pbc.h"
+#include "plumed/core/ActionRegister.h"
+#include "plumed/core/PlumedMain.h"
+#include "plumed/tools/NeighborList.h"
+#include "plumed/tools/Pbc.h"
 
 #include <pybind11/embed.h> // everything needed for embedding
 #include <pybind11/numpy.h>
@@ -422,6 +422,7 @@ PythonCVInterface::PythonCVInterface(const ActionOptions&ao) ://the catch only a
   PLUMED_COLVAR_INIT(ao),
   ActionWithPython(ao) {
   try {
+    py::gil_scoped_acquire gil;
     //Loading the python module
     std::string import;
     parse("IMPORT",import);
@@ -523,17 +524,21 @@ PythonCVInterface::PythonCVInterface(const ActionOptions&ao) ://the catch only a
     std::vector<AtomNumber> groupB;
     pyParseAtomList("GROUPB",initDict,groupB);
 
-    if(atoms.size() !=0 && groupA.size()!=0)
+    if(atoms.size() !=0 && groupA.size()!=0) {
       error("you can choose only between using the neigbourlist OR the atoms");
+    }
 
-    if(atoms.size()==0&& groupA.size()==0 && groupB.size()==0)
+    if(atoms.size()==0&& groupA.size()==0 && groupB.size()==0) {
       error("At least one atom is required");
+    }
 
-    if (atoms.size() != 0 && groupA.size() != 0)
+    if (atoms.size() != 0 && groupA.size() != 0) {
       error("you can choose only between using the neigbourlist OR the atoms");
+    }
 
-    if (atoms.size() == 0 && groupA.size() == 0 && groupB.size() == 0)
+    if (atoms.size() == 0 && groupA.size() == 0 && groupB.size() == 0) {
       error("At least one atom is required");
+    }
 
     bool nopbc;
     pyParseFlag("NOPBC",initDict, nopbc);
@@ -551,11 +556,13 @@ PythonCVInterface::PythonCVInterface(const ActionOptions&ao) ://the catch only a
       int nl_st = 0;
       if (doneigh) {
         pyParse("NL_CUTOFF", initDict, nl_cut);
-        if (nl_cut <= 0.0)
+        if (nl_cut <= 0.0) {
           error("NL_CUTOFF should be explicitly specified and positive");
+        }
         pyParse("NL_STRIDE",initDict, nl_st);
-        if (nl_st <= 0)
+        if (nl_st <= 0) {
           error("NL_STRIDE should be explicitly specified and positive");
+        }
       }
       // endof WIP
       if (groupB.size() > 0) {
@@ -607,11 +614,13 @@ void PythonCVInterface::prepare() {
             error("Neighbor lists should be updated on exchange steps - choose a "
                   "NL_STRIDE which divides the exchange stride!");
         }
-        if (getExchangeStep())
+        if (getExchangeStep()) {
           firsttime = true;
+        }
       }
     }
     if (hasPrepare) {
+      py::gil_scoped_acquire gil;
       py::dict prepareDict = pyPrepare(this);
       if (prepareDict.contains("setAtomRequest")) {
         //should I use "interpretAtomList"?
@@ -641,6 +650,7 @@ void PythonCVInterface::prepare() {
 void PythonCVInterface::update() {
   try {
     if(hasUpdate) {
+      py::gil_scoped_acquire gil;
       py::dict updateDict=pyUpdate(this);
       //See what to do here
     }
@@ -657,6 +667,7 @@ void PythonCVInterface::calculate() {
         nl->update(getPositions());
       }
     }
+    py::gil_scoped_acquire gil;
     // Call the function
     py::object r = pyCalculate(this);
     if(getNumberOfComponents()>1) {		// MULTIPLE NAMED COMPONENTS
@@ -680,8 +691,9 @@ void PythonCVInterface::readReturn(const py::object &r, Value* valPtr) {
     //shape returns long int
     auto natoms = static_cast<long int > (getPositions().size());
     if (rl.size() > 1) {
-      if(!valPtr->hasDerivatives())
+      if(!valPtr->hasDerivatives()) {
         error(valPtr->getName()+" was declared without derivatives, but python returned with derivatives");
+      }
       // 2nd return value: gradient: numpy array of (natoms, 3)
       py::array_t<pycvComm_t> grad(rl[1]);
       // Assert correct gradient shape
@@ -697,12 +709,14 @@ void PythonCVInterface::readReturn(const py::object &r, Value* valPtr) {
         Vector3d gi(grad.at(i, 0), grad.at(i, 1), grad.at(i, 2));
         setAtomsDerivatives(valPtr, i, gi);
       }
-    } else if (valPtr->hasDerivatives())
+    } else if (valPtr->hasDerivatives()) {
       error(valPtr->getName()+" was declared with derivatives, but python returned none");
+    }
 
     if (rl.size() > 2) {
-      if(!valPtr->hasDerivatives())
+      if(!valPtr->hasDerivatives()) {
         plumed_merror(valPtr->getName()+" was declared without derivatives, but python returned with box derivatives");
+      }
       py::array_t<pycvComm_t> pyBoxDev(rl[2]);
       // expecting the box derivatives
       Tensor boxDev;
@@ -724,18 +738,21 @@ void PythonCVInterface::readReturn(const py::object &r, Value* valPtr) {
         error("Python CV returned wrong box derivatives shape error");
       }
       setBoxDerivatives(valPtr, boxDev);
-    } else if (valPtr->hasDerivatives())
+    } else if (valPtr->hasDerivatives()) {
       warning(valPtr->getName()+" was declared with derivatives, but python returned no box derivatives");
+    }
   } else {
     // Only value returned. Might be an error as well.
-    if (valPtr->hasDerivatives())
+    if (valPtr->hasDerivatives()) {
       warning(BIASING_DISABLED);
+    }
     pycvComm_t value = r.cast<pycvComm_t>();
     valPtr->set(value);
   }
   //TODO: is this ok?
-  if (!pbc)
+  if (!pbc) {
     setBoxDerivativesNoPbc(valPtr);
+  }
 }
 
 
@@ -750,10 +767,11 @@ void PythonCVInterface::calculateMultiComponent(py::object &r) {
       std::string key=component->getName().substr(
                         2 + getLabel().size()
                         +PYCV_COMPONENTPREFIX.size());
-      if (dataDict.contains(key.c_str()))
+      if (dataDict.contains(key.c_str())) {
         readReturn(dataDict[key.c_str()], component);
-      else
+      } else {
         error( "python did not returned " + key );
+      }
     }
   } else {
     // In principle one could handle a "list" return case.
@@ -765,8 +783,9 @@ void PythonCVInterface::pyParseAtomList(const char* key, const ::pybind11::dict 
   parseAtomList(key,myatoms);
 
   if(initDict.contains(key)) {
-    if (myatoms.size()>0)
+    if (myatoms.size()>0) {
       error(std::string("you specified the same keyword ").append(key)+ " both in python and in the settings file");
+    }
     auto atomlist=PLMD::Tools::getWords(
                     py::str(initDict[key]).cast<std::string>(),
                     "\t\n ,");
@@ -774,6 +793,8 @@ void PythonCVInterface::pyParseAtomList(const char* key, const ::pybind11::dict 
   }
 }
 
-NeighborList &PythonCVInterface::getNL() { return *nl; }
+NeighborList &PythonCVInterface::getNL() {
+  return *nl;
+}
 } // namespace pycvs
 } // namespace PLMD

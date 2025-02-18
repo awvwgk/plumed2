@@ -16,8 +16,8 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 #include "PythonFunction.h"
 
-#include "core/ActionRegister.h"
-#include "core/PlumedMain.h" // cite
+#include "plumed/core/ActionRegister.h"
+#include "plumed/core/PlumedMain.h" // cite
 
 #include <pybind11/embed.h> // everything needed for embedding
 #include <pybind11/numpy.h>
@@ -120,6 +120,7 @@ PythonFunction::PythonFunction(const ActionOptions&ao):
   Function(ao),
   ActionWithPython(ao) {
   try {
+    py::gil_scoped_acquire gil;
     //Loading the python module
     std::string import;
     parse("IMPORT",import);
@@ -205,6 +206,7 @@ PythonFunction::PythonFunction(const ActionOptions&ao):
 // calculator
 void PythonFunction::calculate() {
   try {
+    py::gil_scoped_acquire gil;
     // Call the function
     py::object r = pyCalculate(this);
     if(getNumberOfComponents()>1) {		// MULTIPLE NAMED COMPONENTS
@@ -226,8 +228,9 @@ void PythonFunction::readReturn(const py::object &r, Value* valPtr) {
     valPtr->set(value);
     if (rl.size() > 1) {
       auto nargs = getNumberOfArguments();
-      if(!valPtr->hasDerivatives())
+      if(!valPtr->hasDerivatives()) {
         error(valPtr->getName()+" was declared without derivatives, but python returned with derivatives");
+      }
       // 2nd return value: gradient: numpy array
       py::array_t<pycvComm_t> grad(rl[1]);
       if(grad.ndim() != 1 || grad.shape(0) != nargs) {
@@ -241,8 +244,9 @@ void PythonFunction::readReturn(const py::object &r, Value* valPtr) {
       for(size_t i=0; i<nargs; i++) {
         valPtr->setDerivative(i,grad.at(i));
       }
-    } else if (valPtr->hasDerivatives())
+    } else if (valPtr->hasDerivatives()) {
       plumed_merror(valPtr->getName()+" was declared with derivatives, but python returned none");
+    }
 
   } else {
     // Only value returned. Might be an error as well.
@@ -263,10 +267,11 @@ void PythonFunction::calculateMultiComponent(py::object &r) {
       std::string key=component->getName().substr(
                         2 + getLabel().size()
                         +PYCV_COMPONENTPREFIX.size());
-      if (dataDict.contains(key.c_str()))
+      if (dataDict.contains(key.c_str())) {
         readReturn(dataDict[key.c_str()], component);
-      else
+      } else {
         error( "python did not returned " + key );
+      }
     }
   } else {
     // In principle one could handle a "list" return case.
